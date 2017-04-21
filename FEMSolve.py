@@ -10,9 +10,11 @@ from Util import x
 def MeshTest():
     """Basic function for testing the Mesh!D module"""
 
+    abc = DifferentialEquation(1, 1, 0, 1, 1, 1, -x**2 / 2 + 0.5*x + 1)
+    #abc = DifferentialEquation(1, 1, 0, 1, 1, 3, -x**2 / 2 + 2.5*x + 1)
     #abc = DifferentialEquation(x, 1, 4*x, 0, 1, 1, 3, -2*x**3 / 3 + 8*x / 3 + 1)
-    abc = DifferentialEquation(1, 3*x**2 - x + 1, -1, 2, 2, 0,
-                               -(x**4)/4 + (x**3)/6 - (x**2)/2 + 7.0*x/12 + 7.0/2)
+    #abc = DifferentialEquation(1, 3*x**2 - x + 1, -1, 2, 2, 0,
+    #                           -(x**4)/4 + (x**3)/6 - (x**2)/2 + 7.0*x/12 + 7.0/2)
 
     abc.SolveFE()
     abc.DisplaySolution(2)

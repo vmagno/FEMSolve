@@ -23,8 +23,8 @@ class DifferentialEquation:
     Mesh = None
 
     def __init__(self, k, f, low, high, bclow, bchigh, exactSolution = 0):
-        self.k = k
-        self.f = f
+        self.k = k + x - x
+        self.f = f + x - x
         self.Mesh = Mesh1D([low, high])
         self.BCond1 = bclow
         self.BCond2 = bchigh
@@ -35,6 +35,12 @@ class DifferentialEquation:
 
     def ShowMesh(self):
         self.Mesh.Display()
+
+    def PrintInfo(self):
+        print('k = ', self.k)
+        print('f = ', self.f)
+        print('Boundaries: ', self.Mesh.LowerLimit, ' and ', self.Mesh.UpperLimit)
+        print('Bd conditions: ', self.BCond1, ' and ', self.BCond2)
 
 #    def SymbolAsFunc(self, symbol):
 #        def _function(a):
@@ -78,10 +84,37 @@ class DifferentialEquation:
     def SolveFE(self):
         self.Mesh.SetNumElements(2)
         self.Mesh.InitDofs(1)
+        self.PrintInfo()
         print(self.Mesh.NodeCoords)
         print(self.Mesh.ElemConnect)
         print(self.Mesh.NodeDof)
         print(self.Mesh.Addressing)
+
+        m_size = range(self.Mesh.NumDofs)
+        A = np.matrix([[0. for j in m_size] for i in m_size])
+        B = np.array([0. for i in m_size])
+
+        # Per-element matrix assembly
+        for e in range(self.Mesh.NumElem):
+            elMat, elB = self.Mesh.GetElemMatrix(e, self.k, self.f)
+            addr = self.Mesh.GetAddressingVector(e)
+            for i in range(elMat.shape[0]):
+                for j in range(elMat.shape[1]):
+                    A[addr[i],addr[j]] = A[addr[i],addr[j]] + elMat[i,j]
+                    B[addr[i]] = B[addr[i]] + elB[i]
+            #print('Element ', i, ': ', elMat)
+
+        print(A)
+        print(B)
+
+        # Boundary conditions
+        A, B = self.Mesh.ApplyBoundaryCond(A, B, self.k, self.f, self.BCond1, self.BCond2)
+        print(A)
+        print(B)
+
+        coefs = np.linalg.solve(A, B)
+        print(coefs)
+
         self.Mesh.Display()
 
     def DisplaySolution(self, degree = 0):
