@@ -82,7 +82,7 @@ class DifferentialEquation:
         self.Solution = sum([self.Shape(i+1) * coefs[i] for i in range(len(coefs))]) + self.LiftFunction
 
     def SolveFE(self):
-        self.Mesh.SetNumElements(2)
+        self.Mesh.SetNumElements(9)
         self.Mesh.InitDofs(1)
         self.PrintInfo()
         print(self.Mesh.NodeCoords)
@@ -95,27 +95,16 @@ class DifferentialEquation:
         B = np.array([0. for i in m_size])
 
         # Per-element matrix assembly
-        for e in range(self.Mesh.NumElem):
-            elMat, elB = self.Mesh.GetElemMatrix(e, self.k, self.f)
-            addr = self.Mesh.GetAddressingVector(e)
-            for i in range(elMat.shape[0]):
-                for j in range(elMat.shape[1]):
-                    A[addr[i],addr[j]] = A[addr[i],addr[j]] + elMat[i,j]
-                    B[addr[i]] = B[addr[i]] + elB[i]
-            #print('Element ', i, ': ', elMat)
-
-        print(A)
-        print(B)
+        self.Mesh.AssembleMatrix(self.k, self.f)
 
         # Boundary conditions
-        A, B = self.Mesh.ApplyBoundaryCond(A, B, self.k, self.f, self.BCond1, self.BCond2)
-        print(A)
-        print(B)
+        self.Mesh.ApplyBoundaryCond(self.k, self.f, self.BCond1, self.BCond2)
 
-        coefs = np.linalg.solve(A, B)
-        print(coefs)
+        # Solve
+        self.Mesh.SolveSystem()
 
-        self.Mesh.Display()
+        self.Mesh.DisplaySolution(SymbolAsFunc(self.ExactSolution))
+        #self.Mesh.Display()
 
     def DisplaySolution(self, degree = 0):
         """ Plots the solution. Solves the equation with the specified degree if

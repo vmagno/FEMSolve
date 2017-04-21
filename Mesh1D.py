@@ -18,6 +18,10 @@ class Mesh1D:
     NumDofs = 0
     PolyDegree = 0
 
+    SystemMatrix = None
+    LoadVector = None
+    Coefs = None
+
     def __init__(self, Boundary):
         self.LowerLimit = min(Boundary)
         self.UpperLimit = max(Boundary)
@@ -27,7 +31,7 @@ class Mesh1D:
         self.PolyDegree = 1
         self.InitDofs()
 
-    def print(self):
+    def PrintInfo(self):
         """Print info about the mesh"""
         print("Coordinates: ", self.NodeCoords)
         print("Elements: ", self.ElemConnect)
@@ -75,16 +79,42 @@ class Mesh1D:
             integrand = SymbolAsFunc(k)
             integralVal = quad(integrand, -1., 1.)[0]
             h = self.GetElemSize(elem)
-            a_elem[0,0] = 0.5 / h * integralVal
-            a_elem[0,1] = -0.5 / h * integralVal
+            a_elem[0,0] = k / h
+            a_elem[0,1] = -k / h
             a_elem[1,0] = a_elem[0,1]
             a_elem[1,1] = a_elem[0,0]
-            b_elem[0] = quad(SymbolAsFunc(f), -1., 1.)[0] * h * 0.5
+            b_elem[0] = f * h / 4. # ** Why does this work???
             b_elem[1] = b_elem[0]
 
         return a_elem,b_elem
 
-    def ApplyBoundaryCond(self, A, B, k, f, c1, c2):
+    def AssembleMatrix(self, k, f):
+        m_size = range(self.NumDofs)
+        self.SystemMatrix = np.matrix([[0. for j in m_size] for i in m_size])
+        self.LoadVector = np.array([0. for i in m_size])
+        A = self.SystemMatrix
+        B = self.LoadVector
+
+        for e in range(self.NumElem):
+            elMat, elB = self.GetElemMatrix(e, k, f)
+
+            print('elMat(', e, '):\n', elMat)
+            print('elB(', e, '):\n', elB)
+            addr = self.GetAddressingVector(e)
+            for i in range(elMat.shape[0]):
+                for j in range(elMat.shape[1]):
+                    A[addr[i],addr[j]] = A[addr[i],addr[j]] + elMat[i,j]
+                    B[addr[i]] = B[addr[i]] + elB[i]
+
+        print(self.SystemMatrix)
+        print(self.LoadVector)
+
+        return A, B
+
+
+    def ApplyBoundaryCond(self, k, f, c1, c2):
+        A = self.SystemMatrix
+        B = self.LoadVector
         A[:,-1] = np.matrix([[0.] for i in range(A.shape[0])])
         A[:,-2] = np.matrix([[0.] for i in range(A.shape[0])])
         A[-1,:] = np.matrix([0. for i in range(A.shape[0])])
@@ -93,11 +123,66 @@ class Mesh1D:
         A[-2,-2] = 1
         B[-1] = c2
         B[-2] = c1
-        # *** Need to get the right index in elementary matrix! ***
-        B[self.Addressing[0][1]] = \
-            B[self.Addressing[0][1]] - self.GetElemMatrix(0, k, f)[0][1,0] * c1
-        B[self.Addressing[-1][-2]] = \
-            B[self.Addressing[-1][-2]] - self.GetElemMatrix(self.NumElem - 1, k, f)[0][0,1] * c2
 
+        term1 = self.GetElemMatrix(0, k, f)[0][1,0] * c1
+        term2 = self.GetElemMatrix(self.NumElem - 1, k, f)[0][0,1] * c2
+        print('t1 = ', term1, ', t2 = ', term2)
+        # *** Need to get the right index in elementary matrix! ***
+        B[self.Addressing[0][1]]   = B[self.Addressing[0][1]] - term1
+        B[self.Addressing[-1][-2]] = B[self.Addressing[-1][-2]] - term2
+
+        #B[0] = 4.5
 
         return A, B
+
+    def SolveSystem(self):
+        self.Coefs = np.linalg.solve(self.SystemMatrix, self.LoadVector)
+        print('A:\n', self.SystemMatrix)
+        print('B:\n', self.LoadVector)
+        print('Coefs: ', self.Coefs)
+        return self.Coefs
+
+    def GetElemAtPoint(self, pt):
+
+        coord = self.NodeCoords
+        connec = self.ElemConnect
+
+        for el in range(self.NumElem):
+            low = coord[connec[el][0]]
+            high = coord[connec[el][-1]]
+            if pt >= low and pt <= high:
+                return el, low, high
+
+        return None
+
+
+    def GetSolValue(self, pt):
+        #try:
+        coefs = self.Coefs
+        el, low, high = self.GetElemAtPoint(pt)
+        ptref = (pt - low) * 2 / (high - low) - 1
+        value = 0.
+        dofs = self.Addressing[el]
+        value = value + coefs[dofs[0]] * (1 - ptref) / 2.
+        value = value + coefs[dofs[-1]] * (1 + ptref) / 2.
+
+        return value
+
+        #except:
+        #    print("Could not get solution at point ", pt, "!!!")
+
+    def DisplaySolution(self, ExactSolution = 0):
+        lower = self.LowerLimit
+        upper = self.UpperLimit
+        NumPts = 25
+        Interval = (upper - lower) / (NumPts - 1)
+        xval = [lower + i * Interval for i in range(NumPts)]
+        yval = [self.GetSolValue(x) for x in xval]
+
+        plt.plot(xval, yval, '-o', label='Computed solution')
+
+        if ExactSolution != 0:
+            plt.plot(xval, [ExactSolution(x) for x in xval], 'g-^', label='Exact solution')
+
+        plt.legend()
+        plt.show()
